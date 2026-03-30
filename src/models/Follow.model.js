@@ -37,4 +37,8 @@ const followSchema = new Schema(
 // Unique compound index on (followerId + followingId)
 followSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
 
+// Indexes to speed up followers and following list and count queries
+followSchema.index({ followingId: 1, isUnfollowed: 1 });
+followSchema.index({ followerId: 1, isUnfollowed: 1 });
+
 export const Follow = mongoose.model("Follow", followSchema);

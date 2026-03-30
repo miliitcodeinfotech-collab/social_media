@@ -8,6 +8,6 @@ import {
 const router = Router();
 
 router.route("/member").post(createMember).get(getAllMembers);
-router.route("/member/:id").get(getMemberById);
+router.route("/:id").get(getMemberById);
 
 export default router;

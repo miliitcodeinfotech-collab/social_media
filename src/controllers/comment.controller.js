@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Comment } from "../models/Comment.model.js";
 import { Post } from "../models/Post.model.js";
 
@@ -70,20 +71,32 @@ const addComment = async (req, res) => {
 const getPostComments = async (req, res) => {
     try {
         const { postId } = req.params;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
 
-        const comments = await Comment.find({
+        const query = {
             postId,
             parentCommentId: null, // Only fetch top-level comments for now
             isDeleted: false
-        })
+        };
+
+        const comments = await Comment.find(query)
             .populate("memberId", "-password")
             .populate("mentions", "-password")
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+
+        const totalComments = await Comment.countDocuments(query);
 
         return res.status(200).json({
             success: true,
             message: "Comments fetched successfully",
             count: comments.length,
+            totalComments,
+            totalPages: Math.ceil(totalComments / limit),
+            currentPage: page,
             data: comments
         });
 
@@ -248,11 +261,31 @@ const toggleCommentLike = async (req, res) => {
 
         await comment.save();
 
+        // Fetch accurate likes count and isLiked status using aggregation
+        const aggregateResult = await Comment.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(commentId)
+                }
+            },
+            {
+                $project: {
+                    likesCount: { $size: "$likedBy" },
+                    isLiked: {
+                        $in: [new mongoose.Types.ObjectId(memberId), "$likedBy"]
+                    }
+                }
+            }
+        ]);
+
+        const updatedLikesCount = aggregateResult.length > 0 ? aggregateResult[0].likesCount : 0;
+        const updatedIsLiked = aggregateResult.length > 0 ? aggregateResult[0].isLiked : false;
+
         return res.status(200).json({
             success: true,
             message: isLiked ? "Comment unliked successfully" : "Comment liked successfully",
-            likesCount: comment.likesCount,
-            isLiked: !isLiked
+            likesCount: updatedLikesCount,
+            isLiked: updatedIsLiked
         });
 
     } catch (error) {
@@ -333,19 +366,31 @@ const replyToComment = async (req, res) => {
 const getCommentReplies = async (req, res) => {
     try {
         const { commentId } = req.params; // parentCommentId
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
 
-        const replies = await Comment.find({
+        const query = {
             parentCommentId: commentId,
             isDeleted: false
-        })
+        };
+
+        const replies = await Comment.find(query)
             .populate("memberId", "-password")
             .populate("mentions", "-password")
-            .sort({ createdAt: 1 }); // Usually oldest first for replies (chronological)
+            .sort({ createdAt: 1 }) // Usually oldest first for replies (chronological)
+            .skip(skip)
+            .limit(limit);
+        
+        const totalReplies = await Comment.countDocuments(query);
 
         return res.status(200).json({
             success: true,
             message: "Replies fetched successfully",
             count: replies.length,
+            totalReplies,
+            totalPages: Math.ceil(totalReplies / limit),
+            currentPage: page,
             data: replies
         });
 

@@ -23,7 +23,7 @@ const commentSchema = new Schema(
     mentions: [
       {
         type: Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Member",
       },
     ],
     likesCount: {
@@ -33,7 +33,7 @@ const commentSchema = new Schema(
     likedBy: [
       {
         type: Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Member",
       },
     ],
     repliesCount: {
@@ -49,5 +49,9 @@ const commentSchema = new Schema(
     timestamps: true,
   }
 );
+
+// Indexes for faster querying
+commentSchema.index({ postId: 1, parentCommentId: 1, isDeleted: 1, createdAt: -1 });
+commentSchema.index({ parentCommentId: 1, isDeleted: 1, createdAt: 1 });
 
 export const Comment = mongoose.model("Comment", commentSchema);

@@ -67,7 +67,7 @@ const getAllMembers = async (req, res) => {
                 .limit(limit),
             Member.countDocuments(query)
         ]);
-        
+
         const totalPages = Math.ceil(totalMembers / limit);
 
         return res.status(200).json({

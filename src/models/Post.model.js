@@ -98,8 +98,8 @@ const postSchema = new Schema(
 // Index for getAllPosts (filter by isDeleted, status and sort by createdAt)
 postSchema.index({ isDeleted: 1, status: 1, createdAt: -1 });
 
-// Index for member-specific queries (getMyPosts, getMemberPosts)
-postSchema.index({ memberId: 1, isDeleted: 1, createdAt: -1 });
+// Index for member-specific queries (getMyPosts, getMemberPosts, and getting profile post counts)
+postSchema.index({ memberId: 1, isDeleted: 1, status: 1, createdAt: -1 });
 
 export const Post = mongoose.model("Post", postSchema);
 
