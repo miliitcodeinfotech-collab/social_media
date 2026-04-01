@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "dev:kill": "taskkill /F /FI \"WINDOWTITLE eq nodemon*\" /T || netstat -ano | findstr :8000 | for /f \"tokens=5\" %a in ('findstr :8000') do taskkill /F /PID %a",
     "deploy": "serverless deploy"
   },
   "dependencies": {

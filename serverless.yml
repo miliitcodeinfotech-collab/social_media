@@ -1,5 +1,7 @@
 service: inout-social-backend
 
+useDotenv: true
+
 provider:
   name: aws
   runtime: nodejs20.x
@@ -18,7 +20,6 @@ functions:
     events:
       - httpApi: '*'
 
+
 plugins:
   - serverless-offline
-
-useDotenv: true

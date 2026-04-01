@@ -15,9 +15,10 @@ const initDB = async () => {
 export const handler = async (event, context) => {
   // Prevent Lambda from waiting for MongoDB background connections to close
   context.callbackWaitsForEmptyEventLoop = false;
-  
+
   await initDB();
-  
+
   const serverlessApp = serverless(app);
   return await serverlessApp(event, context);
 };
+

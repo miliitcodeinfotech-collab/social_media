@@ -1,6 +1,9 @@
 import { Member } from "../models/member.model.js";
 import { Follow } from "../models/Follow.model.js";
 import { Post } from "../models/Post.model.js";
+import { Report } from "../models/Report.model.js";
+import { Block } from "../models/Block.model.js";
+import { Share } from "../models/Share.model.js";
 import mongoose from "mongoose";
 
 // GET /api/v1/profiles/:id
@@ -169,6 +172,7 @@ export const removeFollower = async (req, res) => {
 export const getMemberFollowing = async (req, res) => {
     try {
         const { id } = req.params;
+        const search = req.query.search || "";
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -177,19 +181,68 @@ export const getMemberFollowing = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid ID format" });
         }
 
-        const query = { followerId: id, isUnfollowed: false };
-        
-        const [followingRecords, total] = await Promise.all([
-            Follow.find(query)
-                .populate("followingId", "firstname lastname imageUrl city")
-                .skip(skip)
-                .limit(limit)
-                .sort({ createdAt: -1 }),
-            Follow.countDocuments(query)
-        ]);
+        let following;
+        let total;
 
-        // Extracting member details from populated records
-        const following = followingRecords.map(f => f.followingId);
+        if (search) {
+            // Aggregation for search logic
+            const aggregate = [
+                { $match: { followerId: new mongoose.Types.ObjectId(id), isUnfollowed: false } },
+                {
+                    $lookup: {
+                        from: "members", // Collection name is lowercase 'members'
+                        localField: "followingId",
+                        foreignField: "_id",
+                        as: "memberDetails"
+                    }
+                },
+                { $unwind: "$memberDetails" },
+                {
+                    $match: {
+                        $or: [
+                            { "memberDetails.firstname": { $regex: search, $options: "i" } },
+                            { "memberDetails.lastname": { $regex: search, $options: "i" } }
+                        ]
+                    }
+                },
+                {
+                    $facet: {
+                        metadata: [{ $count: "total" }],
+                        data: [
+                            { $sort: { createdAt: -1 } },
+                            { $skip: skip },
+                            { $limit: limit },
+                            {
+                                $project: {
+                                    _id: "$memberDetails._id",
+                                    firstname: "$memberDetails.firstname",
+                                    lastname: "$memberDetails.lastname",
+                                    imageUrl: "$memberDetails.imageUrl",
+                                    city: "$memberDetails.city"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ];
+
+            const result = await Follow.aggregate(aggregate);
+            following = result[0].data;
+            total = result[0].metadata[0]?.total || 0;
+        } else {
+            // Simple query for non-search (Faster performance)
+            const query = { followerId: id, isUnfollowed: false };
+            const [followingRecords, totalCount] = await Promise.all([
+                Follow.find(query)
+                    .populate("followingId", "firstname lastname imageUrl city")
+                    .skip(skip)
+                    .limit(limit)
+                    .sort({ createdAt: -1 }),
+                Follow.countDocuments(query)
+            ]);
+            following = followingRecords.map(f => f.followingId);
+            total = totalCount;
+        }
 
         return res.status(200).json({
             success: true,
@@ -216,6 +269,7 @@ export const getMemberFollowing = async (req, res) => {
 export const getMemberFollowers = async (req, res) => {
     try {
         const { id } = req.params;
+        const search = req.query.search || "";
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -224,18 +278,66 @@ export const getMemberFollowers = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid ID format" });
         }
 
-        const query = { followingId: id, isUnfollowed: false };
-        
-        const [followerRecords, total] = await Promise.all([
-            Follow.find(query)
-                .populate("followerId", "firstname lastname imageUrl city")
-                .skip(skip)
-                .limit(limit)
-                .sort({ createdAt: -1 }),
-            Follow.countDocuments(query)
-        ]);
+        let followers;
+        let total;
 
-        const followers = followerRecords.map(f => f.followerId);
+        if (search) {
+            const aggregate = [
+                { $match: { followingId: new mongoose.Types.ObjectId(id), isUnfollowed: false } },
+                {
+                    $lookup: {
+                        from: "members",
+                        localField: "followerId",
+                        foreignField: "_id",
+                        as: "memberDetails"
+                    }
+                },
+                { $unwind: "$memberDetails" },
+                {
+                    $match: {
+                        $or: [
+                            { "memberDetails.firstname": { $regex: search, $options: "i" } },
+                            { "memberDetails.lastname": { $regex: search, $options: "i" } }
+                        ]
+                    }
+                },
+                {
+                    $facet: {
+                        metadata: [{ $count: "total" }],
+                        data: [
+                            { $sort: { createdAt: -1 } },
+                            { $skip: skip },
+                            { $limit: limit },
+                            {
+                                $project: {
+                                    _id: "$memberDetails._id",
+                                    firstname: "$memberDetails.firstname",
+                                    lastname: "$memberDetails.lastname",
+                                    imageUrl: "$memberDetails.imageUrl",
+                                    city: "$memberDetails.city"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ];
+
+            const result = await Follow.aggregate(aggregate);
+            followers = result[0].data;
+            total = result[0].metadata[0]?.total || 0;
+        } else {
+            const query = { followingId: id, isUnfollowed: false };
+            const [followerRecords, totalCount] = await Promise.all([
+                Follow.find(query)
+                    .populate("followerId", "firstname lastname imageUrl city")
+                    .skip(skip)
+                    .limit(limit)
+                    .sort({ createdAt: -1 }),
+                Follow.countDocuments(query)
+            ]);
+            followers = followerRecords.map(f => f.followerId);
+            total = totalCount;
+        }
 
         return res.status(200).json({
             success: true,
@@ -312,5 +414,319 @@ export const getSuggestions = async (req, res) => {
     } catch (error) {
         console.error("Error fetching suggestions: ", error);
         return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    }
+};
+
+// GET /api/v1/profiles/:id/about
+export const getMemberAbout = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid member ID format"
+            });
+        }
+
+        const member = await Member.findOne({ _id: id, isDeleted: false })
+            .select("firstname lastname imageUrl city createdAt");
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: "Member not found"
+            });
+        }
+
+        // Fetch counts for the About page header (Matches Screenshot 7)
+        const [postsCount, followersCount, followingCount] = await Promise.all([
+            Post.countDocuments({ memberId: id, isDeleted: false, status: "published" }),
+            Follow.countDocuments({ followingId: id, isUnfollowed: false }),
+            Follow.countDocuments({ followerId: id, isUnfollowed: false })
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: "Account details fetched successfully",
+            data: {
+                _id: member._id,
+                name: `${member.firstname} ${member.lastname}`.trim(),
+                imageUrl: member.imageUrl || "",
+                stats: {
+                    posts: postsCount,
+                    followers: followersCount,
+                    following: followingCount
+                },
+                details: {
+                    dateJoined: member.createdAt,
+                    location: member.city || "Not Specified"
+                }
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching account details: ", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while fetching account details",
+            error: error.message
+        });
+    }
+};
+
+// PATCH /api/v1/profiles/update
+export const updateMemberProfile = async (req, res) => {
+    try {
+        const currentMemberId = req.query.currentMemberId || req.query['member-id'] || req.headers['member-id'] || req.body.memberId;
+        const { firstname, lastname, imageUrl, city } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(currentMemberId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid member ID"
+            });
+        }
+
+        const updateData = {};
+        if (firstname !== undefined) updateData.firstname = firstname;
+        if (lastname !== undefined) updateData.lastname = lastname;
+        if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+        if (city !== undefined) updateData.city = city;
+
+        const updatedMember = await Member.findOneAndUpdate(
+            { _id: currentMemberId, isDeleted: false },
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).select("firstname lastname imageUrl city");
+
+        if (!updatedMember) {
+            return res.status(404).json({
+                success: false,
+                message: "Member not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            data: updatedMember
+        });
+    } catch (error) {
+        console.error("Error updating profile: ", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while updating profile",
+            error: error.message
+        });
+    }
+};
+
+// POST /api/v1/profiles/:id/report
+export const reportProfile = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const currentMemberId = req.query.currentMemberId || req.query['member-id'] || req.headers['member-id'] || req.body.memberId;
+        const { reason, description } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(currentMemberId)) {
+            return res.status(400).json({ success: false, message: "Invalid ID format" });
+        }
+
+        if (!reason) {
+            return res.status(400).json({ success: false, message: "Reason is required to report a profile" });
+        }
+
+        const validReasons = ["spam", "inappropriate", "impersonation", "false_information", "hate_speech", "violence", "other"];
+        if (!validReasons.includes(reason)) {
+            return res.status(400).json({ success: false, message: "Invalid reason provided" });
+        }
+
+        const report = await Report.create({
+            reportedBy: currentMemberId,
+            targetType: "Member",
+            targetId: id,
+            reason,
+            description: description || "",
+            status: "pending"
+        });
+
+        return res.status(201).json({
+            success: true,
+            message: "Profile reported successfully",
+            data: report
+        });
+    } catch (error) {
+        console.error("Error reporting profile: ", error);
+        return res.status(500).json({ success: false, message: "Internal server error while reporting", error: error.message });
+    }
+};
+
+// POST /api/v1/profiles/:id/block
+export const blockProfile = async (req, res) => {
+    try {
+        const { id } = req.params; // ID of the member to be blocked
+        const currentMemberId = req.query.currentMemberId || req.query['member-id'] || req.headers['member-id'] || req.body.memberId;
+
+        if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(currentMemberId)) {
+            return res.status(400).json({ success: false, message: "Invalid ID format" });
+        }
+
+        if (id === currentMemberId) {
+            return res.status(400).json({ success: false, message: "You cannot block yourself" });
+        }
+
+        // Check if block already exists
+        const existingBlock = await Block.findOne({ blockerId: currentMemberId, blockedId: id });
+        if (existingBlock) {
+             if (existingBlock.isActive) {
+                 return res.status(400).json({ success: false, message: "Profile is already blocked" });
+             } else {
+                 existingBlock.isActive = true;
+                 await existingBlock.save();
+             }
+        } else {
+             await Block.create({ blockerId: currentMemberId, blockedId: id, isActive: true });
+        }
+
+        // Unfollow bi-directionally
+        await Follow.updateMany(
+            {
+                $or: [
+                    { followerId: currentMemberId, followingId: id, isUnfollowed: false },
+                    { followerId: id, followingId: currentMemberId, isUnfollowed: false }
+                ]
+            },
+            { $set: { isUnfollowed: true } }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile blocked successfully limit interactions"
+        });
+    } catch (error) {
+        console.error("Error blocking profile: ", error);
+        return res.status(500).json({ success: false, message: "Internal server error while blocking", error: error.message });
+    }
+};
+
+// GET /api/v1/profiles/share-connections
+// Gets a list of members the current member is visually following (to use for sending shares)
+export const getShareConnections = async (req, res) => {
+    try {
+        const currentMemberId = req.query.currentMemberId || req.query['member-id'] || req.headers['member-id'];
+        const search = req.query.search || "";
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        if (!mongoose.Types.ObjectId.isValid(currentMemberId)) {
+            return res.status(400).json({ success: false, message: "Invalid member ID" });
+        }
+
+        // We specifically want to fetch the users that the current user is FOLLOWING
+        const followersAggregate = [
+            { $match: { followerId: new mongoose.Types.ObjectId(currentMemberId), isUnfollowed: false } },
+            {
+                $lookup: {
+                    from: "members", // Ensure collection is 'members'
+                    localField: "followingId",
+                    foreignField: "_id",
+                    as: "memberDetails",
+                },
+            },
+            { $unwind: "$memberDetails" },
+        ];
+
+        // Ensure we handle text searching elegantly if ?search is passed
+        if (search) {
+            followersAggregate.push({
+                $match: {
+                    $or: [
+                        { "memberDetails.firstname": { $regex: search, $options: "i" } },
+                        { "memberDetails.lastname": { $regex: search, $options: "i" } }
+                    ]
+                }
+            });
+        }
+
+        followersAggregate.push(
+            {
+                $facet: {
+                    metadata: [{ $count: "total" }],
+                    data: [
+                        { $sort: { createdAt: -1 } },
+                        { $skip: skip },
+                        { $limit: limit },
+                        {
+                            $project: {
+                                _id: "$memberDetails._id",
+                                firstname: "$memberDetails.firstname",
+                                lastname: "$memberDetails.lastname",
+                                imageUrl: "$memberDetails.imageUrl",
+                            },
+                        },
+                    ],
+                },
+            }
+        );
+
+        const result = await Follow.aggregate(followersAggregate);
+        const connections = result[0].data || [];
+        const total = result[0].metadata[0]?.total || 0;
+
+        return res.status(200).json({
+            success: true,
+            message: "Share connections fetched successfully",
+            pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+            data: connections
+        });
+
+    } catch (error) {
+        console.error("Error fetching share connections: ", error);
+        return res.status(500).json({ success: false, message: "Internal error", error: error.message });
+    }
+};
+
+// POST /api/v1/profiles/:id/share
+export const shareProfile = async (req, res) => {
+    try {
+        const { id } = req.params; // Profile ID to share
+        const currentMemberId = req.query.currentMemberId || req.query['member-id'] || req.headers['member-id'] || req.body.memberId;
+        const { targetIds, message } = req.body; // Array of member IDs to send to
+
+        if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(currentMemberId)) {
+            return res.status(400).json({ success: false, message: "Invalid ID format" });
+        }
+        
+        if (!targetIds || !Array.isArray(targetIds) || targetIds.length === 0) {
+            return res.status(400).json({ success: false, message: "targetIds array is required to share" });
+        }
+
+        // Validate that we are sharing an existing profile
+        const profileExistence = await Member.findById(id);
+        if (!profileExistence) {
+            return res.status(404).json({ success: false, message: "The profile you are trying to share does not exist" });
+        }
+
+        const receivers = targetIds.map(targetId => ({
+            memberId: targetId,
+            message: message || ""
+        }));
+
+        const sharedDoc = await Share.create({
+            senderId: currentMemberId,
+            sharedProfileId: id,
+            receivers: receivers,
+            shareType: "internal"
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile shared successfully",
+            data: sharedDoc
+        });
+    } catch (error) {
+         console.error("Error sharing profile: ", error);
+         return res.status(500).json({ success: false, message: "Internal server error while sharing", error: error.message });
     }
 };

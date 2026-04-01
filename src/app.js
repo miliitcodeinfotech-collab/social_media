@@ -6,8 +6,12 @@ import index from "./routes/index.js";
 const app = express();
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || "*",
-    credentials: true
+    origin: "*",
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "ngrok-skip-browser-warning"
+    ]
 }));
 
 app.use(helmet());
@@ -20,7 +24,7 @@ app.use(express.static("public"));
 app.use("/api/v1", index);
 
 // Health check endpoint
-app.get("/health", (req, res) => {
+app.get("/", (req, res) => {
     res.status(200).json({ status: "OK", service: "Inout Social Backend" });
 });
 

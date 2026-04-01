@@ -92,9 +92,18 @@ const deleteMedia = async (req, res) => {
             });
         }
 
+        let tempPath;
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
-        const filePath = path.resolve(__dirname, "../temp", mediaId);
+
+        // In AWS Lambda, __dirname starts with /var/task. We MUST use /tmp there.
+        if (__dirname.startsWith('/var/task') || process.env.LAMBDA_TASK_ROOT || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+            tempPath = os.tmpdir(); // This will be /tmp in Lambda
+        } else {
+            tempPath = path.resolve(__dirname, "../temp");
+        }
+        
+        const filePath = path.join(tempPath, mediaId);
 
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({

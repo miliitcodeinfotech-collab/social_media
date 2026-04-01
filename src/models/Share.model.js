@@ -10,7 +10,10 @@ const shareSchema = new Schema(
     postId: {
       type: Schema.Types.ObjectId,
       ref: "Post",
-      required: true,
+    },
+    sharedProfileId: {
+      type: Schema.Types.ObjectId,
+      ref: "Member",
     },
     receivers: [
       {
